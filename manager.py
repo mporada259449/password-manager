@@ -1,14 +1,20 @@
 import sqlite3
-from os import urandom
+from os import urandom, path
 import hashlib
+from pyperclip import copy as copy_clipboard
+from time import sleep
 #plik z logiką działania
 class Manager:
     def __init__(self, file="./passwords.db"):
         self.file = file
         self.conn = sqlite3.connect(self.file)
         self.c = self.conn.cursor()
+        self.c.execute("PRAGMA foreign_keys = 1")
 
     def createDatabase(self):
+        #if path.isfile(self.file):
+        #    return 0
+
         self.c.execute("""
             CREATE TABLE passwords(
                 name TEXT PRIMARY KEY UNIQUE,
@@ -22,7 +28,7 @@ class Manager:
             CREATE TABLE integrity(
                 name TEXT,
                 hash TEXT,
-                FOREIGN KEY(name) REFERENCES passwords(name)
+                FOREIGN KEY(name) REFERENCES passwords(name) ON DELETE CASCADE 
             ) 
         """)
 
@@ -33,23 +39,59 @@ class Manager:
         if len(self.c.fetchall()) != 0:
             print("This password already exist")
             return False
-        self.c.execute("INSERT INTO passwords VALUES(?,?,?,?)",(name, password, username, description))
-        hash = hashlib.sha256()
-        passbytes = password.encode("utf-8")
-        hash.update(passbytes)
-        self.c.execute("INSERT INTO integrity VALUES(?,?)", (name, hash.hexdigest()))
-        self.conn.commit()
-        return True
+        else:
+            self.c.execute("INSERT INTO passwords VALUES(?,?,?,?)",(name, password, username, description))
+            self.c.execute("INSERT INTO integrity VALUES(?,?)", (name, self.getHash(password)))
+            self.conn.commit()
+            return True
 
 
-    def deletePassword(self):
-        pass
+    def deletePassword(self, name):
+        self.c.execute("DELETE FROM passwords WHERE name=?", (name,))
+        if self.c.rowcount == 0:
+            print("This entry didn't exist in the datebase")
+        else:
+            self.conn.commit()      
     
-    def getPassword(self, name):
-        pass
+    def getPassword(self, name, verbose = False):
+        self.c.execute("SELECT password FROM passwords WHERE name=?", (name,))
+        passcopy = self.c.fetchone()[0]
+        if len(passcopy) == 0:
+            print("Password with given name doesn't exist")
+        else:
+            print("Password is copied into the clipboard")
+            copy_clipboard(passcopy)
+            if verbose == True:
+                print(f"password: {passcopy}")
+            sleep(10)
+            copy_clipboard("")
+        
+        self.conn.commit()
 
-    def setPassword(self):
-        pass
+    def setData(self, name, data):
+        #data = {password: str, username: str, description: str}
+        change = {k:v for k,v in data.items() if v != None}
+        self.c.execute("SELECT password FROM passwords WHERE name = ? ", (name,))
+        if len(self.c.fetchall()) == 0:
+            print("Entry with this name doesn't exist")
+        else:
+            query = f"UPDATE passwords SET "
+            for key in change.keys():
+                query += f"{key} = \"{change[key]}\", "
+            query = query[:-2] + f" WHERE name=\"{name}\""
+            print(query)
+            self.c.execute(query)
+
+
+            if "password" in data.keys():
+                query_integrity = f"""UPDATE integrity
+                                    SET hash = \"{self.getHash(data["password"])}\"
+                                    WHERE name = \"{name}\""""
+                self.c.execute(query_integrity)
+
+            self.conn.commit()
+            
+       
 
     def closeDatabase(self):
         self.conn.close()
@@ -88,12 +130,29 @@ class Manager:
                 i+=1
         return "".join(password)
 
+    def getHash(self, data):
+        hash = hashlib.sha256()
+        databytes = data.encode("utf-8")
+        hash.update(databytes)
+        return hash.hexdigest()
+
 
 
 if __name__ == "__main__":
-    m = Manager()
+    m = Manager("nowabaza.db")
     #m.createDatabase()
-    m.addPassword(name="first", password=m.generate())
-    m.c.execute("SELECT * FROM passwords, integrity")
+    #m.addPassword(name="new1", password=m.generate())
+    ##m.getPassword(name="second", verbose=True)
+    #m.c.execute("SELECT * FROM integrity")
+    #print(m.c.fetchall())
+    m.c.execute("SELECT * FROM passwords")
     print(m.c.fetchall())
+    #m.deletePassword(name= "new1")
+    ##m.c.execute("SELECT * FROM integrity")
+    #print(m.c.fetchall())
+    #m.c.execute("SELECT * FROM passwords")
+    #print(m.c.fetchall())
+    #m.setData(name = "second", data={"password":"nowehaslo1", "username": "elo", "description": "jakiś tam opis"})
+    #m.c.execute("SELECT * FROM integrity")
+    #print(m.c.fetchall())
     
