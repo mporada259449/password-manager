@@ -55,14 +55,14 @@ class Manager:
     
     def getPassword(self, name, verbose = False):
         self.c.execute("SELECT password FROM passwords WHERE name=?", (name,))
-        passcopy = self.c.fetchone()[0]
-        if len(passcopy) == 0:
+        passcopy = self.c.fetchone()
+        if passcopy is None:
             print("Password with given name doesn't exist")
         else:
             print("Password is copied into the clipboard")
-            copy_clipboard(passcopy)
+            copy_clipboard(passcopy[0])
             if verbose == True:
-                print(f"password: {passcopy}")
+                print(f"password: {passcopy[0]}")
             sleep(10)
             copy_clipboard("")
         
